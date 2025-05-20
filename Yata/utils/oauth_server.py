@@ -16,7 +16,7 @@ load_dotenv()
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
 
 # サーバーの設定
-HOST = "localhost"
+HOST = "0.0.0.0"
 PORT = 8000
 # 外部からアクセス可能なベースURL（ngrok等を使用する場合に設定）
 REDIRECT_BASE_URL = os.getenv("REDIRECT_BASE_URL", f"http://{HOST}:{PORT}")
