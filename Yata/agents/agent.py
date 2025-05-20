@@ -7,9 +7,7 @@ from pathlib import Path
 # 親ディレクトリをパスに追加
 sys.path.append(str(Path(__file__).parent))
 
-# 各エージェントのインポート
-from .google_docs_agent import google_docs_agent
-from .google_drive_search_agent import google_drive_search_agent
+
 # .envファイルから環境変数をロード
 load_dotenv()
 
