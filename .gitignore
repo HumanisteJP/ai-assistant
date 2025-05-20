@@ -172,3 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+token.pickle
+credentials.json
+*tutorial/
+Omoikane/
