@@ -7,7 +7,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import pickle
 from googleapiclient.errors import HttpError
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import markdown
 from bs4 import BeautifulSoup
 
@@ -17,50 +17,74 @@ load_dotenv()
 # Google Docs APIのスコープ
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
 
-def get_credentials():
+def get_credentials(guild_id: str = None) -> Tuple[Optional[Credentials], bool]:
     """
     Google APIの認証情報を取得する関数
     
+    引数:
+        guild_id (str, optional): Discord サーバーのID
+    
     戻り値:
-        Credentials: Google APIの認証情報
+        Tuple[Optional[Credentials], bool]: 認証情報とアクセス可能かどうかのフラグ
     """
     creds = None
+    need_auth = False
+    
+    # サーバー固有のトークンファイル名を生成
+    token_file = 'token.pickle' if guild_id is None else f'token_{guild_id}.pickle'
+    
     # トークンファイルが存在する場合はそれを使用
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
+    if os.path.exists(token_file):
+        with open(token_file, 'rb') as token:
             creds = pickle.load(token)
     
-    # 有効な認証情報がない場合、ユーザーにログインを要求
+    # 有効な認証情報がない場合のフラグ
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            # 更新された認証情報を保存
+            with open(token_file, 'wb') as token:
+                pickle.dump(creds, token)
         else:
-            # credentials.jsonファイルが必要
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        
-        # 次回のために認証情報を保存
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
+            need_auth = True
+            return None, need_auth
     
-    return creds
+    return creds, need_auth
 
-def save_to_google_docs(content, filename, folder_id=None, format_options=None):
+def check_credentials(guild_id: str) -> bool:
+    """
+    認証情報が有効かどうかをチェックする関数
+    
+    引数:
+        guild_id (str): Discord サーバーのID
+    
+    戻り値:
+        bool: 認証情報が有効かどうか
+    """
+    creds, need_auth = get_credentials(guild_id)
+    return not need_auth
+
+def save_to_google_docs(content, filename, guild_id=None, folder_id=None, format_options=None):
     """
     テキスト内容をGoogle Docsに保存する関数
     
     引数:
         content (str): 保存するテキスト内容
         filename (str): Google Docsのドキュメント名
+        guild_id (str, optional): Discord サーバーのID
         folder_id (str, optional): 保存先のGoogle DriveフォルダのID
         format_options (dict, optional): テキストのフォーマットオプション
     
     戻り値:
-        str: 作成されたドキュメントのURL
+        str: 作成されたドキュメントのURL、認証が必要な場合はNone
     """
     try:
         # 認証情報を取得
-        creds = get_credentials()
+        creds, need_auth = get_credentials(guild_id)
+        
+        # 認証が必要な場合
+        if need_auth:
+            return None
         
         # Google Docs APIとDrive APIのサービスを構築
         docs_service = build('docs', 'v1', credentials=creds)
@@ -122,31 +146,28 @@ def save_to_google_docs(content, filename, folder_id=None, format_options=None):
         return None
 
 
-def insert_to_google_docs(document_id: str, markdown_text: str) -> Optional[str]:
+def insert_to_google_docs(document_id: str, markdown_text: str, guild_id: str = None) -> Optional[str]:
     """
     マークダウンテキストをGoogle Docsに挿入する関数
     
     引数:
         document_id (str): Google DocsのドキュメントID
         markdown_text (str): 挿入するマークダウンテキスト
+        guild_id (str, optional): Discord サーバーのID
     
     戻り値:
         Optional[str]: 成功時はドキュメントのURL、失敗時はNone
     """
     try:
-        # 認証情報の設定
-        creds = Credentials.from_authorized_user_info(
-            {
-                'client_id': os.getenv('GOOGLE_CLIENT_ID'),
-                'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
-                'refresh_token': os.getenv('GOOGLE_REFRESH_TOKEN')
-            }
-        )
+        # サーバーごとの認証情報を取得
+        creds, need_auth = get_credentials(guild_id)
+        
+        # 認証が必要な場合
+        if need_auth:
+            return None
         
         # Google Docs APIクライアントの初期化
         service = build('docs', 'v1', credentials=creds)
-        
-
         
         # バッチ更新を実行
         result = service.documents().batchUpdate(
@@ -163,6 +184,3 @@ def insert_to_google_docs(document_id: str, markdown_text: str) -> Optional[str]
     except Exception as e:
         print(f"予期せぬエラーが発生しました: {str(e)}")
         return None
-
-# 使用例:
-# document_url = insert_to_google_docs("document_id", "# 見出し\n\n本文") 

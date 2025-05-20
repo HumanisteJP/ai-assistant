@@ -10,8 +10,9 @@ import pathlib
 import asyncio
 from discord.commands import Option
 from utils.audio_transcription import transcribe_audio
-from utils.google_docs_utils import save_to_google_docs
+from utils.google_docs_utils import save_to_google_docs, check_credentials
 from utils.meeting_minutes import format_meeting_minutes
+from utils.oauth_server import get_auth_url
 
 class RecordingCog(commands.Cog):
     def __init__(self, bot):
@@ -39,6 +40,19 @@ class RecordingCog(commands.Cog):
         # 初期メッセージを送信
         initial_message = await ctx.respond(f"録音開始\nボイスチャンネルに接続中...", ephemeral=False)
         message = await initial_message.original_response()
+        
+        # Google Docsの認証情報をチェック
+        is_authenticated = check_credentials(str(ctx.guild.id))
+        
+        if not is_authenticated:
+            # 認証URLを取得
+            auth_url = get_auth_url(str(ctx.guild.id))
+            if auth_url:
+                await message.edit(content=f"⚠️ Google Docsへのアクセス権限がありません。\n\n録音を開始する前に以下のURLをクリックして認証を行ってください：\n{auth_url}\n\n認証完了後、`/auth_check`コマンドで認証状態を確認してから再度お試しください。")
+                return
+            else:
+                await message.edit(content=f"⚠️ Google Docsへのアクセス権限がありませんが、認証URLの取得に失敗しました。\n管理者に連絡してください。")
+                return
         
         # 同じサーバー内で既に録音中かチェック
         if ctx.guild.id in self.recording_servers:
@@ -186,6 +200,19 @@ class RecordingCog(commands.Cog):
         # 初期メッセージを送信
         message = await ctx.send(f"録音開始\nボイスチャンネルに接続中...")
         
+        # Google Docsの認証情報をチェック
+        is_authenticated = check_credentials(str(ctx.guild.id))
+        
+        if not is_authenticated:
+            # 認証URLを取得
+            auth_url = get_auth_url(str(ctx.guild.id))
+            if auth_url:
+                await message.edit(content=f"⚠️ Google Docsへのアクセス権限がありません。\n\n録音を開始する前に以下のURLをクリックして認証を行ってください：\n{auth_url}\n\n認証完了後、`!auth_check`コマンドで認証状態を確認してから再度お試しください。")
+                return
+            else:
+                await message.edit(content=f"⚠️ Google Docsへのアクセス権限がありませんが、認証URLの取得に失敗しました。\n管理者に連絡してください。")
+                return
+        
         # 同じサーバー内で既に録音中かチェック
         if ctx.guild.id in self.recording_servers:
             current_channel_id = self.recording_servers[ctx.guild.id]
@@ -289,6 +316,45 @@ class RecordingCog(commands.Cog):
             del self.recording_servers[ctx.guild.id]
         
         await message.edit(content=f"録音停止\n✅ ボイスチャンネルの録音を停止しました。\n✅ ボイスチャンネルから切断しました。")
+
+    @commands.slash_command(description="Google Docsの認証状態を確認します。")
+    async def auth_check(self, ctx):
+        """Google Docsの認証状態を確認するコマンド"""
+        # 初期メッセージを送信
+        initial_message = await ctx.respond("認証状態を確認中...", ephemeral=False)
+        message = await initial_message.original_response()
+        
+        # 認証状態を確認
+        is_authenticated = check_credentials(str(ctx.guild.id))
+        
+        if is_authenticated:
+            await message.edit(content="✅ Google Docsの認証は有効です。\n録音機能を使用して議事録を作成できます。")
+        else:
+            # 認証が必要な場合、認証URLを取得
+            auth_url = get_auth_url(str(ctx.guild.id))
+            if auth_url:
+                await message.edit(content=f"❌ Google Docsの認証が必要です。\n\n以下のURLをクリックして認証を行ってください：\n{auth_url}\n\n認証完了後、もう一度このコマンドで認証状態を確認できます。")
+            else:
+                await message.edit(content="❌ Google Docsの認証が必要ですが、認証URLの取得に失敗しました。\n管理者に連絡してください。")
+    
+    @commands.command(name='auth_check', description='Google Docsの認証状態を確認します')
+    async def auth_check_test(self, ctx):
+        """Google Docsの認証状態を確認するテキストコマンド"""
+        # メッセージを送信
+        message = await ctx.send("認証状態を確認中...")
+        
+        # 認証状態を確認
+        is_authenticated = check_credentials(str(ctx.guild.id))
+        
+        if is_authenticated:
+            await message.edit(content="✅ Google Docsの認証は有効です。\n録音機能を使用して議事録を作成できます。")
+        else:
+            # 認証が必要な場合、認証URLを取得
+            auth_url = get_auth_url(str(ctx.guild.id))
+            if auth_url:
+                await message.edit(content=f"❌ Google Docsの認証が必要です。\n\n以下のURLをクリックして認証を行ってください：\n{auth_url}\n\n認証完了後、もう一度このコマンドで認証状態を確認できます。")
+            else:
+                await message.edit(content="❌ Google Docsの認証が必要ですが、認証URLの取得に失敗しました。\n管理者に連絡してください。")
 
     async def finished_callback(self, sink, ctx, *args):
         recorded_users = [f"<@{user_id}>" for user_id, audio in sink.audio_data.items()]
@@ -420,14 +486,31 @@ class RecordingCog(commands.Cog):
                                 minutes_text = format_meeting_minutes(transcribed_text)
                                 
                                 if minutes_text:
-                                    # Google Docsに保存 - 日付と時間（時分）を含むファイル名を使用
+                                    # Google Docsの認証情報をチェック
+                                    is_authenticated = check_credentials(str(guild_id))
+                                    
+                                    if not is_authenticated:
+                                        # 認証URLを取得
+                                        auth_url = get_auth_url(str(guild_id))
+                                        if auth_url:
+                                            await processing_msg.edit(content=f"✅ 文字起こしと議事録化が完了しました。\n\n⚠️ Google Docsへの保存には認証が必要です。\n以下のURLをクリックして認証を行ってください：\n{auth_url}\n\n認証完了後、`!auth_check`コマンドで認証状態を確認できます。")
+                                        else:
+                                            await processing_msg.edit(content="✅ 文字起こしと議事録化が完了しました。\n\n⚠️ Google Docsへの保存には認証が必要ですが、認証URLの取得に失敗しました。\n管理者に連絡してください。")
+                                        return
+                                    
+                                    # 認証済みの場合、Google Docsに保存
                                     doc_title = f"{today}_{hour}_{minute}"
-                                    doc_url = save_to_google_docs(minutes_text, doc_title, self.GOOGLE_DOCS_FOLDER_ID)
+                                    doc_url = save_to_google_docs(minutes_text, doc_title, str(guild_id), self.GOOGLE_DOCS_FOLDER_ID)
                                     
                                     if doc_url:
                                         await processing_msg.edit(content=f"✅ 文字起こしと議事録化が完了！\nGoogle Docsに保存しました: [{doc_title}]({doc_url})")
                                     else:
-                                        await processing_msg.edit(content="✅ 文字起こしと議事録化は完了しましたが、\n❌ Google Docsへの保存に失敗しました。")
+                                        # 保存に失敗した場合も認証切れの可能性があるため、認証URLを表示
+                                        auth_url = get_auth_url(str(guild_id))
+                                        if auth_url:
+                                            await processing_msg.edit(content=f"✅ 文字起こしと議事録化は完了しましたが、\n❌ Google Docsへの保存に失敗しました。\n\n認証が切れている可能性があります。以下のURLから再認証してください：\n{auth_url}")
+                                        else:
+                                            await processing_msg.edit(content="✅ 文字起こしと議事録化は完了しましたが、\n❌ Google Docsへの保存に失敗しました。")
                                 else:
                                     await processing_msg.edit(content="✅ 文字起こしは完了しましたが、\n❌ 議事録化に失敗しました。")
                                 
@@ -483,4 +566,4 @@ class RecordingCog(commands.Cog):
                     print(f"一時ファイルのクリーンアップ中にエラーが発生しました: {e}")
 
 def setup(bot):
-    bot.add_cog(RecordingCog(bot)) 
+    bot.add_cog(RecordingCog(bot))

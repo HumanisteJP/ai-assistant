@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
+from utils.oauth_server import run_oauth_server
 
 # botのインスタンスを作成
 intents = discord.Intents.default()
@@ -55,6 +56,14 @@ async def on_ready():
         print(f'スラッシュコマンドの同期が完了しました')
     except Exception as e:
         print(f'コマンド同期中にエラーが発生しました: {e}')
+    
+    print('OAuthサーバーを起動中...')
+    try:
+        # OAuthサーバーをバックグラウンドで起動
+        server_thread = run_oauth_server()
+        print(f'OAuthサーバーの起動が完了しました')
+    except Exception as e:
+        print(f'OAuthサーバー起動中にエラーが発生しました: {e}')
     
     print('------')
 
