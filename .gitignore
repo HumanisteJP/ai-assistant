@@ -177,4 +177,5 @@ token.pickle
 credentials.json
 *tutorial/
 Omoikane/
-omoikane*/
+omoikane.venv311/
+google-adk-docs/
