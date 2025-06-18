@@ -176,6 +176,5 @@ cython_debug/
 token.pickle
 credentials.json
 *tutorial/
-Omoikane/
+
 omoikane.venv311/
-google-adk-docs/
