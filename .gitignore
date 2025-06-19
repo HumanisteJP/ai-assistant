@@ -178,3 +178,4 @@ credentials.json
 *tutorial/
 
 omoikane.venv311/
+*.db
