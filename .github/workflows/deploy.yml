@@ -31,7 +31,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: "${{ secrets.GCP_PROJECT_ID }}"
-          install_components: "docker"
+          # docker-credential-gcr はデフォルトで含まれているため追加コンポーネント指定は不要
 
       - name: "Configure Docker to use gcloud auth helper"
         run: |
