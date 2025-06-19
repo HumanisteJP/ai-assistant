@@ -606,11 +606,11 @@ jobs:
       # ─────────────────────────────────────────────
       - name: "Rollout latest container"
         run: |
-          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
-            cd /opt/yata && \
-            sudo docker pull ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest && \
-            sudo docker compose --env-file .env pull && \
-            sudo docker compose --env-file .env up -d" 
+          sudo gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet && \
+          cd /opt/yata && \
+          sudo docker pull ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest && \
+          sudo docker compose --env-file .env pull && \
+          sudo docker compose --env-file .env up -d" 
 ```
 
 ---
