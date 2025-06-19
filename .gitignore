@@ -176,6 +176,5 @@ cython_debug/
 token.pickle
 credentials.json
 *tutorial/
-
+yata-agent/*.db
 omoikane.venv311/
-*.db

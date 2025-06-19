@@ -1,0 +1,166 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+開発環境はwindowsです。
+uvを使います
+pythonは3.11を使います
+[pyproject.toml](mdc:yata-agent/pyproject.toml)を必ず参照すること
+渡されたコンテキストの他に yata-agent/tests ディレクトリにあるテストコードを確認して他部分の仕様を確認して良い。
+コンテキストに渡されていないコードの仕様はテストコードや使用可能なツールで把握すること
+純粋関数と依存性注入を意識してコーディングを行うこと
+機能の実装を行う前に yata-agent/tests/<srcをtestsに置き換えてtest_というprefixをつけたフォルダパス>/test_ファイル名.pyにテストコードを作成すること
+例えばyata-agent/src/libA/sectionX/filename.pyのテストはyata-agent/tests/test_libA/test_sectionX/test_filename.pyに作る
+
+- **レイヤーアーキテクチャ**: アプリケーションは以下の3層構造を遵守すること。
+    - **Cogs (Interface Layer)**: Discord APIとの対話、コマンド定義、UI応答に専念する。ビジネスロジックを含めない。
+    - **Services (Business Logic Layer)**: アプリケーションのビジネスロジックを実装する。複数のデータソースや外部APIを操作する。
+    - **Data (Data Access Layer)**: データベースやファイルとの直接的なCRUD操作のみを担当する。
+
+- **型ヒント**: すべての関数の引数と戻り値には、`typing`モジュールを用いた型ヒントを必ず付与すること。
+
+
+- **Docstring**: すべての公開されている関数、クラス、モジュールには、その目的、引数、戻り値を説明するGoogleスタイルのDocstringを記述すること。
+
+
+### 設計原則とコーディング規約
+
+#### 1. レイヤーアーキテクチャ (Layered Architecture)
+アプリケーションは以下の3層構造を厳格に遵守する。各層はすぐ下の層にのみ依存し、責務を明確に分離する。
+
+-   **Interface Layer (`cogs`)**: Discord APIとの対話、コマンド定義、UI応答に専念する。ビジネスロジックを一切含めず、Service層を呼び出すことに徹する。
+-   **Business Logic Layer (`services`)**: アプリケーションのビジネスロジックを実装する。Data層（のインターフェース）を通じてデータを操作し、ビジネスルールに基づいて処理を行う。
+-   **Data Access Layer (`data`)**: データベースや外部APIとの具体的なデータ送受信を担当する。ビジネスロジックを含めず、単純なCRUD操作のインターフェースを実装する。
+
+#### 2. 依存性逆転の原則 (DIP) と 依存性注入 (DI)
+上位のモジュール（例: `Service`層）は、下位のモジュール（例: `Data`層の具体的なDB実装）に直接依存してはならない。両者ともに、**抽象（インターフェース）に依存するべきである。**
+
+-   **抽象インターフェースの定義**:
+    -   `Data`層や外部サービスへのアクセスには、必ず`abc`モジュールを用いた抽象ベースクラス (`DatabaseInterface`など) を定義する。
+    -   このインターフェースは、具体的な実装（SQLite, Firebase等）に依存しない、純粋な「契約」を定義する。
+
+-   **依存性の注入 (Constructor Injection)**:
+    -   クラスは、自身が依存するオブジェクトを内部で生成してはならない（例: `self.db = SQLiteDatabase()` は禁止）。
+    -   必要なオブジェクトは、クラスのコンストラクタ (`__init__`) の引数として外部から渡される（注入される）。
+    -   これにより、具象クラスとの結合が解消され、テスト時にモックオブジェクトへの差し替えが容易になる。
+
+```python
+# 良い例: 抽象(Interface)に依存し、外部から注入される
+from .database_interface import DatabaseInterface
+
+class MyService:
+    def __init__(self, db_engine: DatabaseInterface):
+        self.db = db_engine
+
+# 悪い例: 具象(SQLiteDatabase)に依存し、内部で生成している
+from .sqlite_database import SQLiteDatabase
+
+class MyService:
+    def __init__(self):
+        self.db = SQLiteDatabase("production.db")
+```
+
+#### 3. テスト容易性とテスト駆動開発 (TDD)
+優れた設計は、テストの容易性によって証明される。
+
+-   **テスト先行**: 新しい機能やロジックを実装する際は、まずその仕様を定義するテストコードを先に作成する。
+-   **モックの活用**: 依存性注入の仕組みを利用し、テスト対象のユニットを完全に分離する。依存オブジェクトは、テスト用の「偽物（モック/スタブ）」に差し替える。これにより、テストは高速、安定的、かつ再現可能になる。
+
+#### 4. コーディングスタイル
+-   **型ヒント**: すべての関数の引数と戻り値には、`typing`モジュールを用いた型ヒントを必ず付与する。
+-   **Docstring**: すべての公開されている関数、クラス、モジュールには、その目的、引数、戻り値を説明するGoogleスタイルのDocstringを記述する。
+
+#### 5. 設計と開発の厳格なワークフロー
+
+高品質で保守性の高いコードを維持するため、以下のワークフローを厳格に遵守する。
+
+##### 5.1. 契約(Interface)ファースト設計
+新しいコンポーネントを設計する際は、具体的な実装から着手してはならない。必ず以下の順序で思考し、実装すること。
+1.  **インターフェースの定義**: まず、そのコンポーネントが果たすべき「責務」と「契約」を、`abc`を用いた抽象ベースクラス（Interface）として定義する。
+2.  **依存性の注入**: このコンポーネントを利用する上位層は、具象クラスではなく、定義したインターフェースにのみ依存するように設計する。
+3.  **具象クラスの実装**: 最後に、定義されたインターフェースを満たす具体的なクラスを実装する。
+
+##### 5.2. 厳格なTDDサイクル (Red-Green-Refactor)
+機能の実装やリファクタリングは、必ず以下のテスト駆動開発サイクルに従うこと。このサイクルを省略、または順序を入れ替えることは原則として禁止する。
+1.  **レッド**: まず、これから実装する仕様を検証するための、**意図的に失敗するテスト**を作成する。`pytest`を実行し、期待通りに失敗すること（`FAILED`または`ERROR`）を確認する。
+2.  **グリーン**: レッドフェーズのテストをパスさせるための、**最小限のコード**を実装する。再度`pytest`を実行し、すべてのテストがパスすること（`PASSED`）を確認する。
+3.  **リファクタリング**: テストがパスする状態を維持したまま、コードの可読性や設計を改善する。
+
+##### 5.3. 忠実なテストダブルの原則
+ユニットテストでモックやスタブなどのテストダブルを使用する際は、それが模倣するインターフェースの「契約」を忠実に再現しなければならない。
+-   メソッドのシグネチャ（引数、戻り値の型）を完全に一致させる。
+-   正常系だけでなく、契約上あり得るエラー（例：外部キー制約違反）も正しく模倣する。
+-   本物のコンポーネントとの間で、データ形式の暗黙的な変換（例: `dict` vs `JSON文字列`）がある場合、その変換ロジックがテストの信頼性を損なわないように、モックの責務と立ち位置を慎重に設計する。
+
+### ──────────────────────────────
+### セッション振り返りメモ（2025-06-18）
+### ──────────────────────────────
+1. **Pycord × 非同期テスト**  
+   - `py-cord` を採用した場合、Slash Command の unit-test では  
+     `ApplicationContext.defer()` → `followup.send()` の非同期呼び出しを **必ずモック** する。  
+   - `pytest` で `async def` を扱うには `pytest-asyncio` を依存に追加し、  
+     `pytest.ini` or `[tool.pytest.ini_options]` に明示的な設定は **不要**。  
+     （`asyncio_mode = "auto"` は `pytest-anyio` 向けであり混在させない）
+
+2. **依存ライブラリのバージョン管理**  
+   - `uv pip sync pyproject.toml` 実行時に、古いキャッシュが原因で  
+     “No solution found” エラーが出ることがある。  
+     その場合は **バージョン指定を外す → 同期 → 必要なら固定** の順で対処する。  
+   - `pytest-anyio==0.0.0` はダミーパッケージ。  
+     非同期テストプラグインは **`pytest-asyncio` を第一候補** とする。
+
+3. **モックの粒度と“自明テスト”回避**  
+   - コマンドの戻り値だけでなく、  
+     *依存サービス呼び出し*、*Discord への応答内容*、*ephemeral フラグ* など  
+     副作用を **1 件以上 assert** して価値あるテストにする。  
+   - 異常系（例外発生）も最低 1 ケースは必ず含める。
+
+4. **TDD ワークフローの厳守**  
+   - Red → Green → Refactor の各フェーズでコミットを分ける。  
+   - “Green” を得る前に機能を盛り込み過ぎない。最小実装でパスさせること。
+
+5. **テストダブル設計**  
+   - `spec=InterfaceClass` 付き `MagicMock` を基本とし、  
+     インターフェース外メソッド呼び出しで失敗するようにする。  
+   - `AsyncMock` を使う際は *awaitable* であることを忘れずに。  
+     例： `ctx.followup.send = AsyncMock()`。
+
+6. **ユーティリティ**  
+   - Windows 環境で `uv python -c` が使えない場合は  
+     `yata-agent/.venv/Scripts/python -c` を直接呼び出すと確実。  
+   - `pluggy` など pytest 依存ライブラリ欠損時は  
+     `pip install pytest` を再実行すると解決しやすい。
+
+> 上記は今後のセッションでも再利用価値が高い知見のため、  
+> `project-rules-about-env.mdc` に追記し、レイアウト / アーキテクチャ規約のすぐ後に配置する。
+
+7. モック／スタブ設計のベストプラクティス
+- チェーン API (`obj.method().create().execute()`) をモックする場合  
+  1) `resource = obj.method.return_value` で切り出し  
+  2) `resource.create.return_value.execute.return_value = {...}` の形で  
+     呼び出し階層ごとにモックを設定する。  
+  3) `resource.create.assert_called_once_with(...)` のように **中間オブジェクトに対して assert** する。
+
+- `asyncio.to_thread` で呼び出される関数は同期扱いになるため  
+  **MagicMock** を使用し、`assert_called_once_with` で検証する。
+
+- 非同期メソッド（`await` されるもの）は **AsyncMock** を使用し、  
+  `assert_awaited_once()` で検証する。
+
+- 外部ライブラリのクライアント生成 (`googleapiclient.discovery.build` など) は  
+  **Service 層内部に閉じ込める**。Cog からは非同期インターフェースだけ見る。
+
+- テスト名は `test_<Unit>_<Condition>_<Expectation>` で一貫性を保つ。
+
+#### Windows / PowerShell 固有のCI実行Tips
+- run_terminal_cmd は PowerShell で動く。Linux流に `| cat` を付けると
+  `ParameterBindingException` が起きる場合がある。
+  * Windows では基本的にパイプを付けずに実行し、必要なら `| Out-String`.
+- 複数コマンドを連結する場合は `;` ではなく `;` か `&&` ではなく
+  `; if ($LASTEXITCODE -eq 0) { ... }` を検討。
+- パスは極力 `pathlib.Path` を使い、ハードコードする場合は
+  `C:\\path\\to\\file` 形式か、テストではファイルを実際に作らない。
+- `uv` コマンドは `.venv\\Scripts\\uv` か `uv.exe` がPATHにない場合がある。
+  その際は `python -m uv ...` で呼び出すと安全。
+

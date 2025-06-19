@@ -1,0 +1,94 @@
+name: Deploy Yata Agent
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  REGION: asia-north1          # <-- Artifact Registry と VM を配置したリージョン
+  REPOSITORY: yata-agent       # <-- Artifact Registry のリポジトリ名
+  IMAGE_NAME: yata-agent       # <-- イメージ名 (Dockerfile)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Workload Identity Federation で必須
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Auth to GCP via WIF"
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_SERVICE_ACCOUNT }}"
+
+      - name: "Set up gcloud CLI"
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: "${{ secrets.GCP_PROJECT_ID }}"
+          install_components: "docker"
+
+      - name: "Configure Docker to use gcloud auth helper"
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: "Build & Push image"
+        env:
+          IMAGE_URI: "${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}"
+        run: |
+          docker build -t $IMAGE_URI:${{ github.sha }} -f Dockerfile .
+          docker tag $IMAGE_URI:${{ github.sha }} $IMAGE_URI:latest
+          docker push $IMAGE_URI:${{ github.sha }}
+          docker push $IMAGE_URI:latest
+
+  rollout:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: "Auth to GCP via WIF"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_SERVICE_ACCOUNT }}"
+
+      # ─────────────────────────────────────────────
+      # ① Secret Manager → Actions Runner (.env 作成)
+      # ─────────────────────────────────────────────
+      - name: "Fetch Secrets & create .env"
+        id: envfile
+        run: |
+          DISCORD=$(gcloud secrets versions access latest --secret=discord-token)
+          OPENAI=$(gcloud secrets versions access latest --secret=openai-key)
+          cat <<EOF > /tmp/yata-env
+          DISCORD_TOKEN=$DISCORD
+          OPENAI_API_KEY=$OPENAI
+          EOF
+          chmod 600 /tmp/yata-env
+
+      # ─────────────────────────────────────────────
+      # ② .env を VM へ転送
+      # ─────────────────────────────────────────────
+      - name: "Copy .env to VM"
+        run: |
+          gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/opt/yata/.env \
+            --zone=${{ secrets.GCP_ZONE }} --quiet
+
+      # ─────────────────────────────────────────────
+      # ③ コンテナを pull & compose up -d
+      # ─────────────────────────────────────────────
+      - name: "Rollout latest container"
+        run: |
+          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
+            cd /opt/yata && \
+            docker pull ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest && \
+            docker compose --env-file .env pull && \
+            docker compose --env-file .env up -d" 
