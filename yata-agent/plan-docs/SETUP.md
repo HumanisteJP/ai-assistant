@@ -288,6 +288,8 @@ GIthub Actions から SA を使えます。
    | HTTP challenge が失敗 | DNS 伝播前／80 番閉塞 | `dig` で A レコード確認、FW ルールを再確認 |
    | 443 接続不可 | Firewall or nginx stop | `sudo lsof -i:443`, `systemctl status nginx`|
    | 証明書期限切れ | certbot.timer 無効 | `sudo certbot renew --dry-run` で手動チェック |
+   | `iam.serviceAccounts.getAccessToken` 403 | WIF 設定ミス / principalSet 未付与 | `gcloud iam service-accounts add-iam-policy-binding <SA> --role=roles/iam.workloadIdentityUser --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/attribute.repository/<OWNER>/<REPO>"` を実行して SA と GitHub リポジトリを正しく紐付ける。PowerShell 例は下記参照。 |
+   | `failed to read dockerfile: open Dockerfile: no such file or directory` | Linux ランナーは **大文字小文字を区別** するため、リポジトリ内のファイル名が `DockerFile` や `dockerfile` になっている | 1) ファイルを `Dockerfile` にリネームする 2) もしくは workflow の `docker build -f Dockerfile` を実際のファイル名に合わせて修正 |
 
 これで表に記載した事前準備が完了し、次章以降の **VM 構築** と **CI/CD** へ進めます。
 
@@ -597,6 +599,8 @@ jobs:
 | `403 The caller does not have permission` | WIF 設定ミス | Provider の `attribute.repository` が正しいか確認 |
 | Discord Bot が応答しない | env 未設定 / Docker コンテナ未起動 | `docker compose ps` で状態確認、 Secrets 注入を見直し |
 | FastAPI 404 | Nginx などのリバースプロキシ設定ミス | `curl localhost:8000` を VM 内で確認し、 `proxy_pass` を修正 |
+| `iam.serviceAccounts.getAccessToken` 403 | WIF 設定ミス / principalSet 未付与 | `gcloud iam service-accounts add-iam-policy-binding <SA> --role=roles/iam.workloadIdentityUser --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/attribute.repository/<OWNER>/<REPO>"` を実行して SA と GitHub リポジトリを正しく紐付ける。PowerShell 例は下記参照。 |
+| `failed to read dockerfile: open Dockerfile: no such file or directory` | Linux ランナーは **大文字小文字を区別** するため、リポジトリ内のファイル名が `DockerFile` や `dockerfile` になっている | 1) ファイルを `Dockerfile` にリネームする 2) もしくは workflow の `docker build -f Dockerfile` を実際のファイル名に合わせて修正 |
 
 ---
 ## 9. 参考文献
