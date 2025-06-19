@@ -17,7 +17,7 @@ RUN pip install -U uv && \
 COPY yata-agent /app
 
 # ---------- optional scripts ----------
-COPY scripts /scripts  # ← リポジトリ直下に置いたユーティリティ
+COPY scripts /scripts
 ENV PATH="/scripts:$PATH"
 
 # ---------- runtime ----------
