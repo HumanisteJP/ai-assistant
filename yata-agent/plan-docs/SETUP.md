@@ -596,7 +596,7 @@ jobs:
       # ②b docker-compose.yaml を VM へ転送（/tmp 経由）
       - name: "Copy docker-compose.yaml to VM (/tmp)"
         run: |
-          gcloud compute scp docker-compose.yaml ${{ secrets.GCP_VM_NAME }}:/tmp/docker-compose.yaml \
+          gcloud compute scp ./docker-compose.yaml ${{ secrets.GCP_VM_NAME }}:/tmp/docker-compose.yaml \
             --zone=${{ secrets.GCP_ZONE }} --quiet
 
       # ③ /tmp から /opt/yata へ配置（sudo 権限で移動し所有権を調整）
