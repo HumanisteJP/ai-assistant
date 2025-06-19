@@ -34,7 +34,7 @@ sequenceDiagram
 | **Artifact Registry** | GitHub Actions がビルドした Docker イメージを push。VM 側は pull して再起動。|
 | **Secret Manager** | Discord/OpenAI トークンや `client_secret.json` を安全に保存し、VM 起動時に環境変数として読み込む。|
 | **Service Account `yata-deployer`** | GitHub Actions が impersonate し、Artifact Registry への push や Compute Engine API 操作を実行。|
-| **IAM ロール**<br/>・Artifact Registry Writer<br/>・Compute OS Login<br/>・Compute Instance Admin (v1)<br/>・Service Account Token Creator | 各ロールが許可する具体的 API: push/pull、SSH (OS Login)、VM 更新、SA トークン発行（インパーソネート）。|
+| **IAM ロール** |・Artifact Registry Writer<br/>・Compute OS Login<br/>・Compute Instance Admin (v1)<br/>・Service Account Token Creator<br/>・Service Account User | 各ロールが許可する具体的 API: push/pull、SSH (OS Login)、VM 更新、SA トークン発行（インパーソネート）。|
 | **Workload Identity Federation** | GitHub OIDC トークン → 一時 SA トークンに交換し、秘密鍵レスで GCP 認証を実現。|
 | **Identity Pool / Provider** | 上記 WIF の「入口」設定。issuer=`token.actions.githubusercontent.com`, `attribute.repository` 制限。|
 | **Compute Engine VM** | 本番環境。startup-script で Docker + ffmpeg をセットアップ、docker compose で Bot + FastAPI を稼働。|
@@ -80,7 +80,7 @@ gcloud iam service-accounts create $SA \
   --display-name="Yata Deployer"
 
 # 必要ロールを一括で付与
-for ROLE in artifactregistry.writer compute.osLogin compute.instanceAdmin.v1 iam.serviceAccountTokenCreator; do
+for ROLE in artifactregistry.writer compute.osLogin compute.instanceAdmin.v1 iam.serviceAccountTokenCreator iam.serviceAccountUser; do
   gcloud projects add-iam-policy-binding $PROJECT \
     --member="serviceAccount:${SA}@${PROJECT}.iam.gserviceaccount.com" \
     --role="roles/${ROLE}"
@@ -369,6 +369,15 @@ usermod -aG docker yata
 mkdir -p /opt/yata && chown yata:yata /opt/yata
 ```
 
+> **🧑‍💻 `yata` ユーザーとは？**
+> 
+> - **最小権限で Docker/compose を扱うための運用アカウント**です。`docker` グループに追加しているので *root にならずに* コンテナ操作が可能。
+> - `/opt/yata` 配下に生成される録音ファイルや SQLite DB の **所有者を統一** し、ホスト ↔ コンテナ間の権限トラブルを防ぎます。
+> - 管理者が SSH した際は `sudo -iu yata` で権限を落として作業でき、**保守作業を安全に** 行えます。
+> - 将来 cron や追加スクリプトを流す場合も `yata` のホームや crontab を使えば **root を汚さず** 拡張できます。
+> 
+> なお CI/CD では OS Login 既定ユーザーで `/tmp` に .env をコピーし、`sudo mv` で `/opt/yata` へ配置（§5.2 参照）。`yata` での直接ログイン設定は不要です。
+
 ---
 ## 4. リポジトリ構成の追加
 ```
@@ -448,6 +457,7 @@ volumes:
    - `roles/compute.osLogin`
    - `roles/compute.instanceAdmin.v1`
    - `roles/iam.serviceAccountTokenCreator`
+   - `roles/iam.serviceAccountUser`  # OS Login 経由で SA として SSH / scp するために必須
 2. Identity Pool & Provider を **`token.actions.githubusercontent.com`** と `attribute.repository=="<owner>/<repo>"` で作成
 3. GitHub Secrets に以下 5 つを登録（**Settings → Secrets and variables → Actions**）
 
@@ -564,15 +574,23 @@ jobs:
           chmod 600 /tmp/yata-env
 
       # ─────────────────────────────────────────────
-      # ② .env を VM へ転送
+      # ② .env を VM へ転送（/tmp → sudo mv 方式）
       # ─────────────────────────────────────────────
-      - name: "Copy .env to VM"
+      - name: "Copy .env to VM (/tmp)"
         run: |
-          gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/opt/yata/.env \
+          gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/tmp/yata-env \
             --zone=${{ secrets.GCP_ZONE }} --quiet
 
+      # ③ /tmp から /opt/yata へ配置（sudo 権限で移動し所有権を調整）
+      - name: "Move .env into /opt/yata (sudo)"
+        run: |
+          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
+            sudo mv /tmp/yata-env /opt/yata/.env && \
+            sudo chown yata:yata /opt/yata/.env && \
+            sudo chmod 600 /opt/yata/.env"
+
       # ─────────────────────────────────────────────
-      # ③ コンテナを pull & compose up -d
+      # ④ コンテナを pull & compose up -d
       # ─────────────────────────────────────────────
       - name: "Rollout latest container"
         run: |

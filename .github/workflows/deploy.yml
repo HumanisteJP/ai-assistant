@@ -77,15 +77,23 @@ jobs:
           chmod 600 /tmp/yata-env
 
       # ─────────────────────────────────────────────
-      # ② .env を VM へ転送
+      # ② .env を VM へ転送（/tmp → sudo mv 方式）
       # ─────────────────────────────────────────────
-      - name: "Copy .env to VM"
+      - name: "Copy .env to VM (/tmp)"
         run: |
-          gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/opt/yata/.env \
+          gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/tmp/yata-env \
             --zone=${{ secrets.GCP_ZONE }} --quiet
 
+      # ③ /tmp から /opt/yata へ配置（sudo 権限で移動し所有権を調整）
+      - name: "Move .env into /opt/yata (sudo)"
+        run: |
+          gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
+            sudo mv /tmp/yata-env /opt/yata/.env && \
+            sudo chown yata:yata /opt/yata/.env && \
+            sudo chmod 600 /opt/yata/.env"
+
       # ─────────────────────────────────────────────
-      # ③ コンテナを pull & compose up -d
+      # ④ コンテナを pull & compose up -d
       # ─────────────────────────────────────────────
       - name: "Rollout latest container"
         run: |
