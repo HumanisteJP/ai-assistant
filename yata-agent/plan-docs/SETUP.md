@@ -596,9 +596,9 @@ jobs:
         run: |
           gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
             cd /opt/yata && \
-            docker pull ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest && \
-            docker compose --env-file .env pull && \
-            docker compose --env-file .env up -d" 
+            sudo docker pull ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest && \
+            sudo docker compose --env-file .env pull && \
+            sudo docker compose --env-file .env up -d" 
 ```
 
 ---

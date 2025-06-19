@@ -164,3 +164,4 @@ class MyService:
 - `uv` コマンドは `.venv\\Scripts\\uv` か `uv.exe` がPATHにない場合がある。
   その際は `python -m uv ...` で呼び出すと安全。
 
+コミットメッセージはConventional Commitsを心がける。
