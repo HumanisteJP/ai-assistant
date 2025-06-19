@@ -48,7 +48,7 @@ sequenceDiagram
 | **GCP Project** | `gcloud projects create` or 既存プロジェクトを使用 | |
 | **API 有効化** | Compute Engine, Artifact Registry, Secret Manager | `gcloud services enable compute.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com` |
 | **サービスアカウント** | `yata-deployer` (後述 WIF 用) | |
-| **Artifact Registry** | リポジトリ `yata-agent` (Docker) | `gcloud artifacts repositories create yata-agent --repository-format=docker --location=asia-north1` |
+| **Artifact Registry** | リポジトリ `yata-agent` (Docker) | `gcloud artifacts repositories create yata-agent --repository-format=docker --location=asia-northeast1` |
 | **Secrets** | Discord / OpenAI / Google OAuth クライアント | `gcloud secrets create discord-token --data-file=-` など |
 | **DNS & TLS** | `example.com` を A レコードで VM IP に向け、Certbot で証明書取得 | |
 
@@ -100,7 +100,7 @@ done
 
 #### (3) Artifact Registry を作成
 ```bash
-REGION=asia-north1
+REGION=asia-northeast1
 REPO=yata-agent
 gcloud artifacts repositories create $REPO \
   --repository-format=docker --location=$REGION \
@@ -110,14 +110,14 @@ gcloud artifacts repositories create $REPO \
 
 **🍀 ブラウザ UI での手順**
 1. Cloud Console → **Artifact Registry** を開く。初回は [リポジトリを作成] が表示。
-2. 名前を `yata-agent`, フォーマットを **Docker**, リージョンを `asia-north1` に設定。
+2. 名前を `yata-agent`, フォーマットを **Docker**, リージョンを `asia-northeast1` に設定。
 3. → 推奨設定例
 | 項目 | 推奨値 | 理由 |
 |------|--------|------|
 | 形式 | **Docker** | Yata Agent は Docker イメージを push/pull するため。|
 | モード | **標準** | ローカルにイメージを保存。リモート/仮想は他レジストリ参照用。|
-| ロケーションタイプ | **リージョン** | VM が asia-north1 にあるため同リージョンで低遅延。|
-| リージョン | **asia-north1 (Tokyo)** | 上記と同じ。|
+| ロケーションタイプ | **リージョン** | VM が asia-northeast1 にあるため同リージョンで低遅延。|
+| リージョン | **asia-northeast1 (Tokyo)** | 上記と同じ。|
 | 説明 | `Yata Agent Docker images` | 任意のメモ。|
 | ラベル | `env=prod` など | あとで課金や検索で便利。|
 | 暗号化 | **Google が管理** | 追加コスト不要。KMS を使う場合は組織ポリシーに合わせる。|
@@ -297,7 +297,7 @@ GIthub Actions から SA を使えます。
 ## 3. VM 構築 (Docker + ffmpeg)
 ### 3.1 VM 作成
 ```bash
-ZONE=asia-north1-a
+ZONE=asia-northeast1-a
 PROJECT=<PROJECT_ID>
 gcloud compute instances create yata-prod \
   --project=$PROJECT --zone=$ZONE \
@@ -306,7 +306,8 @@ gcloud compute instances create yata-prod \
   --boot-disk-size=30GB --tags=https-server \
   --metadata=startup-script-url=https://raw.githubusercontent.com/HumanisteJP/ai-assistant/main/scripts/startup-install-docker.sh \
   --service-account=yata-deployer@$PROJECT.iam.gserviceaccount.com \
-  --scopes=https://www.googleapis.com/auth/cloud-platform
+  --scopes=https://www.googleapis.com/auth/cloud-platform \
+  --address=yata-ip
 ```
 
 ### 💻 Windows PowerShell 版
@@ -314,7 +315,7 @@ gcloud compute instances create yata-prod \
 # ========= ① 変数定義 =========
 $PROJECT = "agents-460015"                 # ← ご自分の Project ID
 $ACCOUNT = "ushida.yosei@gmail.com"        # ← ご自分の Google アカウント
-$ZONE    = "asia-northeast1-a"                 # ポリシーで禁止なら us-central1-a などに変更
+$ZONE    = "asia-northeast1-a"                 # ポリシーで禁止なら asia-northeast1-a などに変更
 $MEMBER  = "user:$ACCOUNT"                 # 変換不要
 
 # ========= ② IAM 権限付与 (1 回だけ) =========
@@ -342,7 +343,8 @@ gcloud compute instances create "yata-prod" `
   --tags="https-server" `
   --metadata="startup-script-url=https://raw.githubusercontent.com/HumanisteJP/ai-assistant/main/scripts/startup-install-docker.sh" `
   --service-account="yata-deployer@$PROJECT.iam.gserviceaccount.com" `
-  --scopes="https://www.googleapis.com/auth/cloud-platform"
+  --scopes="https://www.googleapis.com/auth/cloud-platform" `
+  --address="yata-ip"
 ```
 
 ### 3.2 startup-install-docker.sh
@@ -399,7 +401,7 @@ RUN pip install -U uv && \
 COPY yata-agent /app
 
 # ---------- optional scripts ----------
-COPY scripts /scripts  # ← リポジトリ直下に置いたユーティリティ
+COPY scripts /scripts
 ENV PATH="/scripts:$PATH"
 
 # ---------- runtime ----------
@@ -412,14 +414,14 @@ CMD ["python", "-m", "src.main"]
 version: "3.9"
 services:
   yata:
-    image: asia-north1-docker.pkg.dev/<PROJECT_ID>/yata-agent/yata-agent:latest
+    image: ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/yata-agent/yata-agent:latest
     container_name: yata-agent
     restart: always
     environment:
       DISCORD_TOKEN: "${DISCORD_TOKEN}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       CLIENT_SECRETS_JSON: "${CLIENT_SECRETS_JSON}"
-      REDIRECT_URI: "https://example.com/oauth2callback"
+      REDIRECT_URI: "https://agent.humaniste.site/oauth2callback"
       DB_PATH: "/data/yata_agent.db"
     volumes:
       - recordings:/var/yata/recordings
@@ -432,7 +434,7 @@ volumes:
   db-data:
     driver: local
 ```
-*(compose は **環境変数** を参照します。VM 側の `/etc/profile.d/yata-env.sh` などで `export DISCORD_TOKEN=...` を設定しておくか、Secret Manager から `docker compose up` 前に `source` で読み込んでください)*
+*(compose は **環境変数** を参照します。VM 側の `/etc/profile.d/yata-env.sh` などで `export DISCORD_TOKEN=...`, `export REGION=asia-northeast1`, `export GCP_PROJECT_ID=my-gcp-project` などを設定しておくか、Secret Manager から `.env` として読み込んでください)*
 
 > **セクション参照修正**：以前「Dockerfile は §5.2、compose は §5.3」としていましたが、現在は *この章* に統合しました（4.1 / 4.2）。
 
@@ -454,7 +456,7 @@ volumes:
    | `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF Provider のフルリソース名 | `projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider` | Cloud Console → 該当 Provider 詳細 → **リソース名** をコピー。`gcloud iam workload-identity-pools providers describe github-provider --workload-identity-pool=github-pool --location="global" --format="value(name)"` で取得。 |
    | `GCP_SERVICE_ACCOUNT` | デプロイ用 SA のメール | `yata-deployer@<project>.iam.gserviceaccount.com` | `iam.serviceAccounts.getAccessToken` を impersonate する対象 |
    | `GCP_PROJECT_ID` | GCP Project ID | `my-gcp-project` | `gcloud config get-value project` で確認 |
-   | `GCP_ZONE` | VM が存在するゾーン | `us-central1-a` | `gcloud compute instances list` で確認 |
+   | `GCP_ZONE` | VM が存在するゾーン | `asia-northeast1-a` | `gcloud compute instances list` で確認 |
    | `GCP_VM_NAME` | 本番 VM 名 | `yata-prod` | `gcloud compute instances list` で確認 |
 
    **登録手順（Web ブラウザ UI）**
@@ -474,7 +476,7 @@ volumes:
    gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER -b "projects/123456789/.../providers/github-provider"
    gh secret set GCP_SERVICE_ACCOUNT           -b "yata-deployer@my-gcp-project.iam.gserviceaccount.com"
    gh secret set GCP_PROJECT_ID                -b "my-gcp-project"
-   gh secret set GCP_ZONE                      -b "us-central1-a"
+   gh secret set GCP_ZONE                      -b "asia-northeast1-a"
    gh secret set GCP_VM_NAME                   -b "yata-prod"
    ```
    - `-b` オプションは値を stdin ではなくそのままバイト列で渡す指定。
@@ -490,7 +492,7 @@ on:
     branches: [ main ]
 
 env:
-  REGION: asia-north1          # <-- Artifact Registry と VM を配置したリージョン
+  REGION: asia-northeast1          # <-- Artifact Registry と VM を配置したリージョン
   REPOSITORY: yata-agent       # <-- Artifact Registry のリポジトリ名
   IMAGE_NAME: yata-agent       # <-- イメージ名 (Dockerfile)
 
@@ -556,6 +558,8 @@ jobs:
           cat <<EOF > /tmp/yata-env
           DISCORD_TOKEN=$DISCORD
           OPENAI_API_KEY=$OPENAI
+          REGION=${{ env.REGION }}
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           EOF
           chmod 600 /tmp/yata-env
 

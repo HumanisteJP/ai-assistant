@@ -1,14 +1,14 @@
 version: "3.9"
 services:
   yata:
-    image: asia-north1-docker.pkg.dev/<PROJECT_ID>/yata-agent/yata-agent:latest
+    image: ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/yata-agent/yata-agent:latest
     container_name: yata-agent
     restart: always
     environment:
       DISCORD_TOKEN: "${DISCORD_TOKEN}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       CLIENT_SECRETS_JSON: "${CLIENT_SECRETS_JSON}"
-      REDIRECT_URI: "https://example.com/oauth2callback"
+      REDIRECT_URI: "https://agent.humaniste.site/oauth2callback"
       DB_PATH: "/data/yata_agent.db"
     volumes:
       - recordings:/var/yata/recordings

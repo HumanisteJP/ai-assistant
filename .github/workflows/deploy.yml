@@ -5,7 +5,7 @@ on:
     branches: [ main ]
 
 env:
-  REGION: asia-north1          # <-- Artifact Registry と VM を配置したリージョン
+  REGION: asia-northeast1          # <-- Artifact Registry と VM を配置したリージョン
   REPOSITORY: yata-agent       # <-- Artifact Registry のリポジトリ名
   IMAGE_NAME: yata-agent       # <-- イメージ名 (Dockerfile)
 
@@ -71,6 +71,8 @@ jobs:
           cat <<EOF > /tmp/yata-env
           DISCORD_TOKEN=$DISCORD
           OPENAI_API_KEY=$OPENAI
+          REGION=${{ env.REGION }}
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           EOF
           chmod 600 /tmp/yata-env
 
