@@ -593,10 +593,10 @@ jobs:
           gcloud compute scp /tmp/yata-env ${{ secrets.GCP_VM_NAME }}:/tmp/yata-env \
             --zone=${{ secrets.GCP_ZONE }} --quiet
 
-      # ②b docker-compose.yml を VM へ転送（/tmp 経由）
-      - name: "Copy docker-compose.yml to VM (/tmp)"
+      # ②b docker-compose.yaml を VM へ転送（/tmp 経由）
+      - name: "Copy docker-compose.yaml to VM (/tmp)"
         run: |
-          gcloud compute scp docker-compose.yml ${{ secrets.GCP_VM_NAME }}:/tmp/docker-compose.yml \
+          gcloud compute scp docker-compose.yaml ${{ secrets.GCP_VM_NAME }}:/tmp/docker-compose.yaml \
             --zone=${{ secrets.GCP_ZONE }} --quiet
 
       # ③ /tmp から /opt/yata へ配置（sudo 権限で移動し所有権を調整）
@@ -608,11 +608,11 @@ jobs:
             sudo chmod 600 /opt/yata/.env"
 
       # ③b compose ファイルも配置
-      - name: "Move docker-compose.yml into /opt/yata (sudo)"
+      - name: "Move docker-compose.yaml into /opt/yata (sudo)"
         run: |
           gcloud compute ssh ${{ secrets.GCP_VM_NAME }} --zone=${{ secrets.GCP_ZONE }} --quiet --command "\
-            sudo mv /tmp/docker-compose.yml /opt/yata/docker-compose.yml && \
-            sudo chown yata:yata /opt/yata/docker-compose.yml"
+            sudo mv /tmp/docker-compose.yaml /opt/yata/docker-compose.yaml && \
+            sudo chown yata:yata /opt/yata/docker-compose.yaml"
 
       # ─────────────────────────────────────────────
       # ④ コンテナを pull & compose up -d
