@@ -1,0 +1,6 @@
+services:
+  yata:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yata-agent:local 

@@ -3,7 +3,8 @@ description:
 globs: 
 alwaysApply: true
 ---
-開発環境はwindowsです。
+開発環境はwindowsです。あなたの利用するコマンド環境はPowerSellであり、PowerShell では && 連結は使えず、コマンドを 2 行に分ける必要があります。
+判断や主張を行う場合などいかなる場合にもカレントディレクトリを常に意識して明示すること。
 uvを使います
 pythonは3.11を使います
 [pyproject.toml](mdc:yata-agent/pyproject.toml)を必ず参照すること
