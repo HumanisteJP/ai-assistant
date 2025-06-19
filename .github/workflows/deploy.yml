@@ -70,9 +70,11 @@ jobs:
         run: |
           DISCORD=$(gcloud secrets versions access latest --secret=discord-token)
           OPENAI=$(gcloud secrets versions access latest --secret=openai-key)
+          GCLIENT=$(gcloud secrets versions access latest --secret=gcp-client-json)
           cat <<EOF > /tmp/yata-env
           DISCORD_TOKEN=$DISCORD
           OPENAI_API_KEY=$OPENAI
+          CLIENT_SECRETS_JSON=$GCLIENT
           REGION=${{ env.REGION }}
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           EOF
