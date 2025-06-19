@@ -392,7 +392,7 @@ RUN apt-get update && \
 WORKDIR /app
 COPY yata-agent/pyproject.toml .
 RUN pip install -U uv && \
-    uv pip sync pyproject.toml && \
+    uv pip sync pyproject.toml --system && \
     rm -rf ~/.cache/pip
 
 # ---------- application code ----------
