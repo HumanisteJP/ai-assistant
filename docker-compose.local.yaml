@@ -4,3 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: yata-agent:local 
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"  # FastAPI が待ち受けるポート

@@ -11,6 +11,8 @@ from discord.ext import commands
 
 from services.processing_service import ProcessingService
 from services.audio_service import AudioService
+from services.readiness_service import ReadinessLevel
+from utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +35,26 @@ class RecordingCog(commands.Cog):
     async def record_start(self, ctx: discord.ApplicationContext):  # type: ignore[override]
         await ctx.defer(ephemeral=True)
 
+        # ---------------- readiness check ----------------
+        try:
+            readiness_service = ctx.bot.container.readiness_service  # type: ignore[attr-defined]
+            status = readiness_service.check(ctx.guild.id if ctx.guild else 0)
+            if status.level != ReadinessLevel.READY:
+                await ctx.followup.send(status.guidance())
+                return
+        except AttributeError:
+            # テストや初期化不足で DI がない場合はスキップ
+            pass
+
         voice_state = getattr(ctx.author, "voice", None)
         if not voice_state or not voice_state.channel:
-            await ctx.followup.send("❌ 先にボイスチャンネルへ参加してください。")
+            await ctx.followup.send(msg("voice_join_first"))
             return
 
         guild_id = ctx.guild.id if ctx.guild else 0
         
         if guild_id in self._active_recordings:
-            await ctx.followup.send("⚠️ すでに録音中です。/record_stop で停止してください。")
+            await ctx.followup.send(msg("record_already"))
             return
 
         voice_channel: discord.VoiceChannel = voice_state.channel  # type: ignore[assignment]
@@ -64,16 +77,33 @@ class RecordingCog(commands.Cog):
             sink=sink,
         )
 
-        await ctx.followup.send("✅ 録音を開始しました。/record_stop で停止します。")
+        await ctx.followup.send(msg("record_start"))
 
     # ---------------------------- record stop -----------------------------
     @discord.slash_command(name="record_stop", description="録音を停止し、議事録作成を開始します。")
     async def record_stop(self, ctx: discord.ApplicationContext):  # type: ignore[override]
         await ctx.defer(ephemeral=True)
-        guild_id = ctx.guild.id if ctx.guild else 0
+        # Guild context check
+        if not ctx.guild:
+            await ctx.followup.send(msg("guild_only"))
+            return
+
+        guild_id = ctx.guild.id
+
+        # Readiness check (setup/auth)
+        try:
+            from services.readiness_service import ReadinessLevel, ReadinessService  # local import
+            readiness_service: ReadinessService = ctx.bot.container.readiness_service  # type: ignore[attr-defined]
+            status = readiness_service.check(guild_id)
+            if status.level != ReadinessLevel.READY:
+                await ctx.followup.send(status.guidance())
+                return
+        except AttributeError:
+            pass  # container not available (tests) continue
+
         record = self._active_recordings.get(guild_id)
         if not record:
-            await ctx.followup.send("❌ 現在録音は行われていません。")
+            await ctx.followup.send(msg("record_stop_no_record"))
             return
 
         voice_client: discord.VoiceClient = record.voice_client  # type: ignore[attr-defined]
@@ -86,7 +116,7 @@ class RecordingCog(commands.Cog):
         # state cleanup
         self._active_recordings.pop(guild_id, None)
 
-        await ctx.followup.send("⏹️ 録音を停止しました。録音データを処理します…")
+        await ctx.followup.send(msg("record_stop_done"))
 
     # ------------------------------------------------------------------
     # Internal helpers

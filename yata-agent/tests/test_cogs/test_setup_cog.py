@@ -118,3 +118,17 @@ class TestSetupCog:
         args, kwargs = mock_ctx.followup.send.call_args
         assert "エラーが発生しました" in kwargs.get("content", "")
         assert "設定の保存に失敗しました" in kwargs.get("content", "")
+
+    async def test_setup_dm_disallowed(self, setup_cog: SetupCog):
+        """/setup をDMで実行すると guild-only エラーが返る"""
+        mock_ctx = AsyncMock(spec=discord.ApplicationContext)
+        mock_ctx.defer = AsyncMock()
+        mock_ctx.followup.send = AsyncMock()
+        mock_ctx.guild = None
+
+        await setup_cog.setup.callback(setup_cog, mock_ctx, gdrive_folder_id="", language="ja")
+
+        mock_ctx.followup.send.assert_awaited_once()
+        args, kwargs = mock_ctx.followup.send.call_args
+        content = kwargs.get("content", args[0] if args else "")
+        assert "サーバー内でのみ実行" in content

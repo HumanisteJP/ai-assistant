@@ -3,6 +3,8 @@ import discord
 from discord.ext import commands
 
 from services.google_service_interface import GoogleServiceInterface
+from services.readiness_service import ReadinessLevel
+from utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +33,21 @@ class AuthCog(commands.Cog):
         await ctx.defer(ephemeral=True)
 
         if not ctx.guild:
-            await ctx.followup.send("このコマンドはサーバー内でのみ実行できます。")
+            await ctx.followup.send(msg("guild_only"))
             return
 
         guild_id = ctx.guild.id
+
+        # ---------------- readiness check ----------------
+        try:
+            readiness_service = ctx.bot.container.readiness_service  # type: ignore[attr-defined]
+            status = readiness_service.check(guild_id)
+            if status.level == ReadinessLevel.NEED_SETUP:
+                await ctx.followup.send(status.guidance())
+                return
+        except AttributeError:
+            pass
+
         state = f"gid:{guild_id}"
 
         try:
@@ -50,7 +63,7 @@ class AuthCog(commands.Cog):
             await ctx.author.send(dm_message)
 
             await ctx.followup.send(
-                content="✅ 認証用のURLをダイレクトメッセージに送信しました。DMを確認してください。"
+                content=msg("auth_url_sent")
             )
             logger.info(f"Sent auth URL to user {ctx.author.id} for guild {guild_id}")
 

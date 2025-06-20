@@ -78,11 +78,14 @@ async def oauth2callback(code: str, state: str):
     # convert them into 500 responses, which is acceptable here.
     await google_service.exchange_code_for_credentials(guild_id=guild_id, code=code)
 
-    # Minimal success response (can be improved to a branded HTML page)
-    return HTMLResponse(
-        content="<html><body><h3>Authentication successful! You may close this tab.</h3></body></html>",
-        status_code=200,
+    # bilingual message
+    html = (
+        "<html><body style='font-family:sans-serif;'>"
+        "<h3>✅ 認証に成功しました！ このタブは閉じて構いません。<br/>"
+        "Authentication successful! You may close this tab.</h3>"
+        "</body></html>"
     )
+    return HTMLResponse(content=html, status_code=200)
 
 
 # -------------------------------------------------------------------------
@@ -120,6 +123,7 @@ if __name__ == "__main__":
     from services.transcription_service import TranscriptionService
     from services.processing_service import ProcessingService
     from services.audio_service import AudioService
+    from services.readiness_service import ReadinessService
 
     # Load environment -----------------------------------------------------
     DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -141,6 +145,7 @@ if __name__ == "__main__":
 
     transcription_service = TranscriptionService(api_key=OPENAI_API_KEY)
     processing_service = ProcessingService(transcription_service, google_service, db_service)
+    readiness_service = ReadinessService(db_service)
 
     audio_service = AudioService()
 
@@ -150,6 +155,7 @@ if __name__ == "__main__":
     container.transcription_service = transcription_service
     container.processing_service = processing_service
     container.audio_service = audio_service
+    container.readiness_service = readiness_service
 
     # Discord bot setup ----------------------------------------------------
     intents = discord.Intents.default()
@@ -165,6 +171,7 @@ if __name__ == "__main__":
         bot.load_extension("cogs.setup_cog")
         bot.load_extension("cogs.recording_cog")
         bot.load_extension("cogs.auth_cog")
+        bot.load_extension("cogs.status_cog")
 
     bot.loop.create_task(_startup())  # type: ignore[attr-defined]
 

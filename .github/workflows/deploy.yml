@@ -10,6 +10,34 @@ env:
   IMAGE_NAME: yata-agent       # <-- イメージ名 (Dockerfile)
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: yata-agent
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          pip install uv
+
+      - name: Sync dependencies with uv
+        run: |
+          uv pip sync pyproject.toml
+
+      - name: Run pytest
+        run: |
+          uv pip install pytest pytest-asyncio
+          uv pip list
+          pytest
+
   build:
     runs-on: ubuntu-latest
     permissions:

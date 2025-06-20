@@ -28,5 +28,14 @@ Neo4jは上手く設定で切れば利用
 # Docker
 Dockerを使用して再現性のある実行環境を構築
 
+# ローカルでのdockerテスト
+```
+<!-- Dockerfileを変更した場合 -->
+docker compose -f docker-compose.yaml -f docker-compose.local.yaml up --build -d
+docker compose -f docker-compose.yaml -f docker-compose.local.yaml ps
+```
 
-
+# DIscord bot permission
+```
+https://discord.com/oauth2/authorize?client_id=1372950625679183983&permissions=292094508032&integration_type=0&scope=bot+applications.commands
+```
