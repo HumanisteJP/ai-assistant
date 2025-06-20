@@ -33,7 +33,7 @@ class StatusCog(commands.Cog):
         await ctx.defer(ephemeral=True)
 
         if not ctx.guild:
-            await ctx.followup.send(msg("guild_only"))
+            await ctx.followup.send(content=msg("guild_only"))
             return
 
         guild_id = ctx.guild.id
